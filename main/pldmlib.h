@@ -1,4 +1,5 @@
-
+#include <stddef.h>
+#include <stdint.h>
 int parsed_all();
 int parsed_layer1();
 int parsed_layer2();
@@ -13,6 +14,18 @@ uint8_t *compo(int *compo_info_size, uint16_t *cur_size);
 #define CHECKSUM_SIZE 4
 #define PKG_HEADER_SIZE_OFFSET 17
 #define COMPO_LOCATION_FIELD_OFFSET 12
+
+/* DSP0267 package header: 10=1.0, 11=1.1, 12=1.2, 13=1.3 */
+extern int pldm_dsp0267_ver;
+int pldm_parse_spec_version(const char *s);
+void pldm_spec_version_string(char *out, size_t out_len);
+void pldm_get_package_header_id(uint8_t out[16]);
+uint8_t pldm_get_package_header_revision(void);
+int pldm_trailing_checksum_bytes(void);
+int pldm_has_downstream_area(void);
+int pldm_has_component_opaque(void);
+int pldm_has_reference_manifest(void);
+
 
 
 /*-------------layer1 : Package Header Information------------------*/

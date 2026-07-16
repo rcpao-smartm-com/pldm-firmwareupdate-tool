@@ -116,11 +116,27 @@ uint8_t *compo(int *compo_info_size, uint16_t *cur_size){
     memcpy(compo_img_info[j] + field_offset[6], &ver_str_type,  sizeof(ver_str_type));
     memcpy(compo_img_info[j] + field_offset[7], &ver_str_len,  sizeof(ver_str_len));
     memcpy(compo_img_info[j] + field_offset[8], &str,  sizeof(str));
+
+    if (pldm_has_component_opaque())
+    {
+      uint32_t b_opaque_len = 0;
+      uint8_t *tmp = realloc(compo_img_info[j], compo_img_info_len[j] + sizeof(b_opaque_len));
+      if (!tmp)
+      {
+        printf("compo_img_info realloc failed");
+        fclose(b_file);
+        return NULL;
+      }
+      compo_img_info[j] = tmp;
+      memcpy(compo_img_info[j] + compo_img_info_len[j], &b_opaque_len, sizeof(b_opaque_len));
+      compo_img_info_len[j] = compo_img_info_len[j] + sizeof(b_opaque_len);
+      *compo_info_size = *compo_info_size + sizeof(b_opaque_len);
+    }
   }
   fclose(b_file);
 
   *compo_info_size =  *compo_info_size + sizeof(b_compo_image_num);
-  b_compo_offset = b_compo_offset + *compo_info_size + CHECKSUM_SIZE;
+  b_compo_offset = b_compo_offset + *compo_info_size + pldm_trailing_checksum_bytes();
 
   for(int img_num = 0; img_num < b_compo_image_num; img_num++)
   {

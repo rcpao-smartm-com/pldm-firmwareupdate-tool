@@ -14,8 +14,7 @@ uint8_t *pkg_info(int *pkg_info_size, uint16_t *compo_bitmap_len){
     return NULL;
   }
   *pkg_info_size = 0;
-  uint8_t PLDM_id[16] = { 0xF0, 0x18, 0x87, 0x8C, 0xCB, 0x7D, 0x49, 0x43, 0x98, 0x00, 0xA0, 0x2F,
-                          0x05, 0x9A, 0xCA, 0x02 }; //Refer to different version of PLDM FW Update Spec
+  uint8_t PLDM_id[16];
   uint8_t pkg_revision;
   uint8_t pkg_header_size [2] = {0};
   uint8_t *cur_time;
@@ -23,9 +22,11 @@ uint8_t *pkg_info(int *pkg_info_size, uint16_t *compo_bitmap_len){
   uint16_t b_compo_bitmap_len;
   uint8_t b_pkg_str_type;
   uint8_t b_pkg_str_len;
+  pldm_get_package_header_id(PLDM_id);
   cur_time = timestamp104();
   memcpy(pkg_release_time, cur_time, sizeof(pkg_release_time));
-  pkg_revision = json_object_get_int(l1.pkg_header_revision);
+  /* Override JSON revision with the DSP0267 format revision for the selected spec. */
+  pkg_revision = pldm_get_package_header_revision();
   b_compo_bitmap_len = *compo_bitmap_len * 8; //Transforming bitfield into Byte
   b_pkg_str_type = str_type(json_object_get_string(l1.pkg_ver_str_type));
   b_pkg_str_len = strlen(json_object_get_string(l1.pkg_ver_str));

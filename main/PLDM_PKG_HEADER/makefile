@@ -1,4 +1,4 @@
-objects = pkg_info.o FD_ID.o compo.o data_trans_fxn.o parse_PLDM_json.o
+objects = pkg_info.o FD_ID.o compo.o data_trans_fxn.o parse_PLDM_json.o pldm_version.o
  
 libpldm.a: $(objects)
 	ar -rc libpldm.a $(objects)
@@ -17,6 +17,10 @@ data_trans_fxn.o: data_trans_fxn.c data_trans_fxn.h
 
 parse_PLDM_json.o: parse_PLDM_json.c pldmlib.h
 	gcc -c -o parse_PLDM_json.o parse_PLDM_json.c
+
+
+pldm_version.o: pldm_version.c pldmlib.h
+	gcc -c -o pldm_version.o pldm_version.c
 
 clean: 
 	rm libpldm.a $(objects)

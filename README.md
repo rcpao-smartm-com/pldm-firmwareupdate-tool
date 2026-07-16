@@ -46,12 +46,12 @@ Ensure PLDM.json and image_payload.bin are located in the same directory.
 Install all necessary dependencies before running the program.
 
 ## Input
-The program expects a file named PLDM.json in the same directory to serve as input. Additionally, there should be a image_payload.bin file, the content of which will be appended to the generated firmware package header.        
+The program expects `PLDM.json` in the `main/` directory, plus a firmware image path and version passed on the command line (the image is packaged as the component payload).
 
 ## Output
 Upon successful execution, the utility generates:
--> pldm_update_header.bin: This is the binary representation of the firmware header, inclusive of the appended checksum.
--> pldm_update_pkg.bin: This is the binary representation of the entire firmware package, inclusive of the appended image_payload.bin.
+- `pldm_update_header.bin`: package header including checksum field(s)
+- `pldm<spec>-<image_basename>`: full PLDM firmware update package (header + payload), e.g. `pldm1.0-img_0.bin`
 
 
 ## Usage
@@ -61,10 +61,24 @@ For the json-c library:
     sudo apt install libjson-c-dev
 
 ### Encoding 
-To generate the PLDM_FW_PKG_Header.bin:
-    
+Build, then encode a package for a DSP0267 header revision:
+
     make all
+    cd main
+    ./pldm_encode.exe <image_file> <firmware_version> <spec_version>
+    # spec_version: 1.0 | 1.1 | 1.2 | 1.3
+
+Example (also what `make encode` runs):
+
     make encode
+    # -> main/pldm_encode.exe img_0.bin 1.0.0 1.0
+
+| `<spec_version>` | Package Header Identifier (UUID) | Format revision |
+|------------------|----------------------------------|-----------------|
+| 1.0 | `F018878C-…-CA02` | 0x01 |
+| 1.1 | `1244D264-…-7D5A` | 0x02 (+ empty Downstream Device area) |
+| 1.2 | `3119CE2F-…-F6BF` | 0x03 (+ Component Opaque Data length 0) |
+| 1.3 | `7B291C99-…-3C78` | 0x04 (+ Reference Manifest length 0, payload CRC) |
 
 ![image](https://github.com/quanta-Irenelin/PLDM_FW_UPDATE/assets/85274528/3168a588-b750-4157-8a1a-c09a56324a77)
 ![image](https://github.com/quanta-Irenelin/PLDM_FW_UPDATE/assets/85274528/bf9a6505-9c90-46b1-a966-17715edf0ff9)
@@ -100,14 +114,11 @@ You can view the object files within the libpldm.a static library using:
 3. FD_ID.o
 4. data_trans_fxn.o
 5. parse_PLDM_json.o
+6. pldm_version.o
 
 
 ## Additional Resources
-For more information on the PLDM firmware update specification, refer to the document: 
-PLDM for Firmware Update Specification DSP0267_1.0.0.pdf:
+For more information on the PLDM firmware update specification, refer to DSP0267 (DMTF), including versions 1.0.x through 1.3.0:
 
-https://www.dmtf.org/sites/default/files/standards/documents/DSP0267_1.0.0.pdf
-
-
-
+https://www.dmtf.org/standards/pmci
 

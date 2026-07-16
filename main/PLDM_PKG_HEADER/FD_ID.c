@@ -83,6 +83,8 @@ uint8_t *FD_ID(int *fd_id_size, uint16_t *compo_bitmap_len){
       char init_data[16];
       uint8_t hex_data[2];////edit
       uint16_t ver_str_type_len[2];
+      uint32_t b_ref_manifest_len = 0;
+      int has_manifest = pldm_has_reference_manifest();
       uint8_t field_offset[FD_ID_REC_FIELD] = {
                                                sizeof(b_rec_len[dev_serial_num]),
                                                sizeof(b_des_num),
@@ -101,6 +103,8 @@ uint8_t *FD_ID(int *fd_id_size, uint16_t *compo_bitmap_len){
         field_offset[i+1] = field_offset[i] + field_offset[i+1];
 
       b_rec_len[dev_serial_num] = field_offset[FD_ID_REC_FIELD-1];
+      if (has_manifest)
+        b_rec_len[dev_serial_num] = b_rec_len[dev_serial_num] + sizeof(b_ref_manifest_len);
       *fd_id_size = *fd_id_size + b_rec_len[dev_serial_num];
       fd_rec[dev_serial_num] = malloc(b_rec_len[dev_serial_num]);
       if(!fd_rec[dev_serial_num])
@@ -111,15 +115,22 @@ uint8_t *FD_ID(int *fd_id_size, uint16_t *compo_bitmap_len){
           return NULL;
       }
 
-      memcpy(fd_rec[dev_serial_num], &b_rec_len[dev_serial_num], sizeof(b_rec_len));
+      memcpy(fd_rec[dev_serial_num], &b_rec_len[dev_serial_num], sizeof(b_rec_len[dev_serial_num]));
       memcpy(fd_rec[dev_serial_num] + field_offset[0], &b_des_num, sizeof(b_des_num));
       memcpy(fd_rec[dev_serial_num] + field_offset[1], &b_dev_opt_flag, sizeof(b_dev_opt_flag));
       memcpy(fd_rec[dev_serial_num] + field_offset[2], &b_compo_setver_str_type, sizeof(b_compo_setver_str_type));
       memcpy(fd_rec[dev_serial_num] + field_offset[3], &b_compo_setver_str_len, sizeof(b_compo_setver_str_len));
       memcpy(fd_rec[dev_serial_num] + field_offset[4], &b_fd_pkg_data_len, sizeof(b_fd_pkg_data_len));
-      memcpy(fd_rec[dev_serial_num] + field_offset[5], b_apply_compo[dev_serial_num], *compo_bitmap_len);
-      memcpy(fd_rec[dev_serial_num] + field_offset[6], &str, sizeof(str));
-      uint8_t des_offset = field_offset[7];
+      uint8_t off = field_offset[4] + sizeof(b_fd_pkg_data_len);
+      if (has_manifest)
+      {
+        memcpy(fd_rec[dev_serial_num] + off, &b_ref_manifest_len, sizeof(b_ref_manifest_len));
+        off = off + sizeof(b_ref_manifest_len);
+      }
+      memcpy(fd_rec[dev_serial_num] + off, b_apply_compo[dev_serial_num], *compo_bitmap_len);
+      off = off + *compo_bitmap_len;
+      memcpy(fd_rec[dev_serial_num] + off, &str, sizeof(str));
+      off = off + sizeof(str);
       free(b_apply_compo[dev_serial_num]);
 
       for (int i = 0; i < b_des_num ; i++)
@@ -130,10 +141,10 @@ uint8_t *FD_ID(int *fd_id_size, uint16_t *compo_bitmap_len){
         json_object_object_get_ex(l2.des_data, "Initial Descriptor Data", &l2.data);
         memcpy(init_data, json_object_get_string(l2.data), strlen(json_object_get_string(l2.data)));
         hexstr_tobin(init_data, sizeof(init_data), hex_data, sizeof(hex_data));
-        memcpy(fd_rec[dev_serial_num] + des_offset, &ver_str_type_len, sizeof(ver_str_type_len));
-        des_offset = des_offset + sizeof(ver_str_type_len) ;
-        memcpy(fd_rec[dev_serial_num] + des_offset, &hex_data, sizeof(hex_data));
-        des_offset = des_offset + sizeof(hex_data);
+        memcpy(fd_rec[dev_serial_num] + off, &ver_str_type_len, sizeof(ver_str_type_len));
+        off = off + sizeof(ver_str_type_len) ;
+        memcpy(fd_rec[dev_serial_num] + off, &hex_data, sizeof(hex_data));
+        off = off + sizeof(hex_data);
       }
   }
   uint8_t *fd_id_buf = malloc(*fd_id_size * sizeof(uint8_t));
