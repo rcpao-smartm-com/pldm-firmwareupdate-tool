@@ -54,14 +54,21 @@ static void parseAndPrintTimestamp104(const uint8_t timeField[13])
     printf("UTC/Offset Flag: 0x%02x\n", utcFlag);
 }
 
+static void printHexBytes(const uint8_t *data, size_t len)
+{
+    size_t i;
+    for (i = 0; i < len; i++)
+        printf(" %02x", data[i]);
+}
+
 /*
- * Example of parsing and printing the entire PLDM update header:
+ * Parse and print a PLDM firmware update package header (DSP0267 1.0–1.3):
  *   1) Read pkg_header_size (2 bytes) at offset=17
- *   2) Parse the Package Header (PLDMFirmwarePackageHeader)
- *   3) Parse the bitfield of applicableComponents for device records
- *   4) Parse descriptors, version strings, etc.
- *   5) Parse component images
- *   6) Parse final 4-byte checksum
+ *   2) Package Header Information
+ *   3) Firmware Device ID records (+ ReferenceManifestLength/Data on 1.3)
+ *   4) Downstream Device area (1.1+)
+ *   5) Component Image Information (+ OpaqueData on 1.2+)
+ *   6) PackageHeaderChecksum (+ PackagePayloadChecksum on 1.3)
  */
 static int parseFile(const char* filePath)
 {
@@ -110,6 +117,18 @@ static int parseFile(const char* filePath)
     printf("PackageHeaderFormatRevision: 0x%02x\n", hdr->packageHeaderFormatRevision);
     printf("PackageHeaderSize: %d bytes\n", hdr->packageHeaderSize);
 
+    int specVer = pldmFwDetectDsp0267Version(hdr->packageHeaderIdentifier,
+                                             hdr->packageHeaderFormatRevision);
+    if (specVer < 0)
+    {
+        fprintf(stderr, "Unrecognized PackageHeaderIdentifier / FormatRevision\n");
+        free(buffer);
+        return 1;
+    }
+    char specStr[8];
+    pldmFwDsp0267VersionString(specVer, specStr, sizeof(specStr));
+    printf("DSP0267 Package Format: %s\n", specStr);
+
     printf("PackageReleaseDateTime:\n");
     parseAndPrintTimestamp104(hdr->packageReleaseDateTime);
 
@@ -157,6 +176,24 @@ static int parseFile(const char* filePath)
                devRec->componentImageSetVersionStringLength);
 
         uint16_t fwPkgDataLen = devRec->firmwareDevicePackageDataLength;
+        printf("  FirmwareDevicePackageDataLength: %d\n", fwPkgDataLen);
+
+        /* 1.3+: ReferenceManifestLength before ApplicableComponents */
+        uint32_t refManifestLen = 0;
+        if (pldmFwHasReferenceManifest(specVer))
+        {
+            if ((size_t)index + 4 > pkgHeaderSize)
+            {
+                fprintf(stderr, "Truncated header reading ReferenceManifestLength\n");
+                free(buffer);
+                return 1;
+            }
+            refManifestLen = pldmFwExtractUint32LE(
+                buffer[index], buffer[index + 1],
+                buffer[index + 2], buffer[index + 3]);
+            index += 4;
+            printf("  ReferenceManifestLength: %u\n", refManifestLen);
+        }
 
         /* parse "applicableComponents" bitfield of length compBitmapBytes if needed: */
         int compBitmapBytes = hdr->componentBitmapBitLength / 8;
@@ -225,25 +262,88 @@ static int parseFile(const char* filePath)
             }
         }
 
-        /* parse "firmwareDevicePackageData" => devRec->firmwareDevicePackageDataLength */
+        /* parse "firmwareDevicePackageData" => FirmwareDevicePackageDataLength */
         if (fwPkgDataLen > 0)
         {
-            printf("  FirmwareDevicePackageDataLength: %d bytes\n", fwPkgDataLen);
+            if ((size_t)index + fwPkgDataLen > pkgHeaderSize)
+            {
+                fprintf(stderr, "Truncated header reading FirmwareDevicePackageData\n");
+                free(buffer);
+                return 1;
+            }
             uint8_t* pkgDataPtr = &buffer[index];
             index += fwPkgDataLen;
 
             printf("  FirmwareDevicePackageData (hex):");
-            for (i = 0; i < fwPkgDataLen; i++)
-            {
-                printf(" %02x", pkgDataPtr[i]);
-            }
+            printHexBytes(pkgDataPtr, fwPkgDataLen);
             printf("\n");
         }
         else
         {
-            printf("  FirmwareDevicePackageDataLength: 0 (none)\n");
+            printf("  FirmwareDevicePackageData: (none)\n");
+        }
+
+        /* 1.3+: ReferenceManifestData after FirmwareDevicePackageData */
+        if (pldmFwHasReferenceManifest(specVer))
+        {
+            if (refManifestLen > 0)
+            {
+                if ((size_t)index + refManifestLen > pkgHeaderSize)
+                {
+                    fprintf(stderr, "Truncated header reading ReferenceManifestData\n");
+                    free(buffer);
+                    return 1;
+                }
+                uint8_t* manPtr = &buffer[index];
+                index += (int)refManifestLen;
+                printf("  ReferenceManifestData (hex):");
+                printHexBytes(manPtr, refManifestLen);
+                printf("\n");
+            }
+            else
+            {
+                printf("  ReferenceManifestData: (none)\n");
+            }
         }
         printf("\n");
+    }
+
+    /* 2b) Downstream Device Identification Area (1.1+) */
+    if (pldmFwHasDownstreamArea(specVer))
+    {
+        if ((size_t)index + 1 > pkgHeaderSize)
+        {
+            fprintf(stderr, "Truncated header reading DownstreamDeviceIDRecordCount\n");
+            free(buffer);
+            return 1;
+        }
+        uint8_t downstreamCount = buffer[index];
+        index += 1;
+        printf("--------------------------------------------\n");
+        printf("Downstream Device ID Record Count: %d\n\n", downstreamCount);
+
+        int drec;
+        for (drec = 0; drec < downstreamCount; drec++)
+        {
+            if ((size_t)index + 2 > pkgHeaderSize)
+            {
+                fprintf(stderr, "Truncated header reading DownstreamDeviceRecordLength\n");
+                free(buffer);
+                return 1;
+            }
+            int recStart = index;
+            uint16_t dRecLen = pldmFwExtractUint16LE(buffer[index], buffer[index + 1]);
+            printf("=== Downstream Device ID Record #%d ===\n", drec);
+            printf("  DownstreamDeviceRecordLength: %d\n", dRecLen);
+            if (dRecLen < 2 || (size_t)recStart + dRecLen > pkgHeaderSize)
+            {
+                fprintf(stderr, "Invalid DownstreamDeviceRecordLength\n");
+                free(buffer);
+                return 1;
+            }
+            printf("  (record body %d bytes; skipping detailed parse)\n\n", dRecLen - 2);
+            index = recStart + dRecLen;
+        }
     }
 
     /* 3) parse the ComponentImageCount (2 bytes, LE) */
@@ -290,11 +390,45 @@ static int parseFile(const char* filePath)
             }
             printf("\n");
         }
+
+        /* 1.2+: ComponentOpaqueDataLength + ComponentOpaqueData */
+        if (pldmFwHasComponentOpaque(specVer))
+        {
+            if ((size_t)index + 4 > pkgHeaderSize)
+            {
+                fprintf(stderr, "Truncated header reading ComponentOpaqueDataLength\n");
+                free(buffer);
+                return 1;
+            }
+            uint32_t opaqueLen = pldmFwExtractUint32LE(
+                buffer[index], buffer[index + 1],
+                buffer[index + 2], buffer[index + 3]);
+            index += 4;
+            printf("  ComponentOpaqueDataLength: %u\n", opaqueLen);
+            if (opaqueLen > 0)
+            {
+                if ((size_t)index + opaqueLen > pkgHeaderSize)
+                {
+                    fprintf(stderr, "Truncated header reading ComponentOpaqueData\n");
+                    free(buffer);
+                    return 1;
+                }
+                printf("  ComponentOpaqueData (hex):");
+                printHexBytes(&buffer[index], opaqueLen);
+                printf("\n");
+                index += (int)opaqueLen;
+            }
+            else
+            {
+                printf("  ComponentOpaqueData: (none)\n");
+            }
+        }
         printf("\n");
     }
 
-    /* 4) parse the final 4-byte checksum (CRC32) if within range */
-    if ((index + 4) <= pkgHeaderSize)
+    /* 4) PackageHeaderChecksum (+ PackagePayloadChecksum on 1.3) */
+    int trail = pldmFwTrailingChecksumBytes(specVer);
+    if (index + trail <= pkgHeaderSize)
     {
         uint32_t sumVal = pldmFwExtractUint32LE(
             buffer[index], buffer[index+1],
@@ -303,11 +437,27 @@ static int parseFile(const char* filePath)
 
         printf("--------------------------------------------\n");
         printf("Package Header Checksum (CRC32): 0x%08x\n", sumVal);
+
+        if (pldmFwHasReferenceManifest(specVer))
+        {
+            uint32_t payloadCrc = pldmFwExtractUint32LE(
+                buffer[index], buffer[index + 1],
+                buffer[index + 2], buffer[index + 3]);
+            index += 4;
+            printf("Package Payload Checksum (CRC32): 0x%08x\n", payloadCrc);
+        }
     }
     else
     {
         printf("--------------------------------------------\n");
-        printf("No checksum found (index out of range)\n");
+        printf("No checksum found (index=%d, need %d more bytes, headerSize=%d)\n",
+               index, trail, pkgHeaderSize);
+    }
+
+    if (index != pkgHeaderSize)
+    {
+        printf("Note: parse ended at offset %d (PackageHeaderSize=%d)\n",
+               index, pkgHeaderSize);
     }
 
     free(buffer);

@@ -198,3 +198,57 @@ int pldmFwGetPowerOfTwoExponent(int num)
     }
     return exponent;
 }
+
+int pldmFwDetectDsp0267Version(const uint8_t uuid[16], uint8_t formatRevision)
+{
+    static const uint8_t id_1_0[16] = {
+        0xF0, 0x18, 0x87, 0x8C, 0xCB, 0x7D, 0x49, 0x43,
+        0x98, 0x00, 0xA0, 0x2F, 0x05, 0x9A, 0xCA, 0x02};
+    static const uint8_t id_1_1[16] = {
+        0x12, 0x44, 0xD2, 0x64, 0x8D, 0x7D, 0x47, 0x18,
+        0xA0, 0x30, 0xFC, 0x8A, 0x56, 0x58, 0x7D, 0x5A};
+    static const uint8_t id_1_2[16] = {
+        0x31, 0x19, 0xCE, 0x2F, 0xE8, 0x0A, 0x4A, 0x99,
+        0xAF, 0x6D, 0x46, 0xF8, 0xB1, 0x21, 0xF6, 0xBF};
+    static const uint8_t id_1_3[16] = {
+        0x7B, 0x29, 0x1C, 0x99, 0x6D, 0xB6, 0x42, 0x08,
+        0x80, 0x1B, 0x02, 0x02, 0x6E, 0x46, 0x3C, 0x78};
+
+    if (!uuid)
+        return -1;
+    if (memcmp(uuid, id_1_0, 16) == 0)
+        return 10;
+    if (memcmp(uuid, id_1_1, 16) == 0)
+        return 11;
+    if (memcmp(uuid, id_1_2, 16) == 0)
+        return 12;
+    if (memcmp(uuid, id_1_3, 16) == 0)
+        return 13;
+
+    switch (formatRevision)
+    {
+    case 0x01: return 10;
+    case 0x02: return 11;
+    case 0x03: return 12;
+    case 0x04: return 13;
+    default:   return -1;
+    }
+}
+
+void pldmFwDsp0267VersionString(int ver, char *out, size_t out_len)
+{
+    if (!out || out_len < 4)
+        return;
+    switch (ver)
+    {
+    case 11: snprintf(out, out_len, "1.1"); break;
+    case 12: snprintf(out, out_len, "1.2"); break;
+    case 13: snprintf(out, out_len, "1.3"); break;
+    default: snprintf(out, out_len, "1.0"); break;
+    }
+}
+
+int pldmFwHasDownstreamArea(int ver) { return ver >= 11; }
+int pldmFwHasComponentOpaque(int ver) { return ver >= 12; }
+int pldmFwHasReferenceManifest(int ver) { return ver >= 13; }
+int pldmFwTrailingChecksumBytes(int ver) { return (ver >= 13) ? 8 : 4; }

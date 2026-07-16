@@ -73,6 +73,21 @@ void pldmFwPrintComponentClassification(uint8_t low, uint8_t high);
  */
 int pldmFwGetPowerOfTwoExponent(int num);
 
+/**
+ * @brief Map PackageHeaderIdentifier UUID + format revision to DSP0267 major.minor
+ *        encoded as 10=1.0, 11=1.1, 12=1.2, 13=1.3. Prefers UUID match; falls back
+ *        to format revision (0x01..0x04). Returns -1 if unrecognized.
+ */
+int pldmFwDetectDsp0267Version(const uint8_t uuid[16], uint8_t formatRevision);
+
+/** @brief Write "1.0".."1.3" into out (needs at least 4 bytes). */
+void pldmFwDsp0267VersionString(int ver, char *out, size_t out_len);
+
+int pldmFwHasDownstreamArea(int ver);       /* >= 1.1 */
+int pldmFwHasComponentOpaque(int ver);      /* >= 1.2 */
+int pldmFwHasReferenceManifest(int ver);    /* >= 1.3 */
+int pldmFwTrailingChecksumBytes(int ver);   /* 8 for 1.3, else 4 */
+
 /* --------------------------------------------------------------------------
  * 1. PLDM Firmware Package Header (Table 3)
  *
@@ -102,7 +117,7 @@ int pldmFwGetPowerOfTwoExponent(int num);
 typedef struct __attribute__((packed))
 {
     uint8_t  packageHeaderIdentifier[16];    ///< 16 bytes (UUID)
-    uint8_t  packageHeaderFormatRevision;    ///< 1 byte, current definition is 0x01
+    uint8_t  packageHeaderFormatRevision;    ///< 1 byte: 0x01=1.0 .. 0x04=1.3
     uint16_t packageHeaderSize;              ///< 2 bytes, LE, total size of the header
     uint8_t  packageReleaseDateTime[13];     ///< 13-byte timestamp(104)
     uint16_t componentBitmapBitLength;       ///< 2 bytes, LE, multiple of 8
