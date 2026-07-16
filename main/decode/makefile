@@ -2,16 +2,24 @@
 CC     = gcc
 CFLAGS = -Wall -Wextra -O2 -std=c11
 
+ifeq ($(OS),Windows_NT)
+EXEEXT = .exe
+else
+EXEEXT =
+endif
+
+DECODE = parse_pldm$(EXEEXT)
+
 # Objects and target library
 OBJECTS = pldm_fw_update_parse.o main.o
 LIBPARSE = libparse.a
 
 # Default build target
-all: parse_pldm.exe
+all: $(DECODE)
 
 # Rule to create the final executable
-parse_pldm.exe: $(LIBPARSE) main.c
-	$(CC) $(CFLAGS) main.c $(LIBPARSE) -lz -ljson-c -o parse_pldm.exe
+$(DECODE): $(LIBPARSE) main.c
+	$(CC) $(CFLAGS) main.c $(LIBPARSE) -lz -ljson-c -o $(DECODE)
 
 # Archive the object(s) into libparse.a
 $(LIBPARSE): $(OBJECTS)
@@ -23,4 +31,4 @@ pldm_fw_update_parse.o: pldm_fw_update_parse.c pldm_fw_update_parse.h
 
 # Clean up build outputs
 clean:
-	rm -f $(LIBPARSE) $(OBJECTS) parse_pldm.exe
+	rm -f $(LIBPARSE) $(OBJECTS) parse_pldm parse_pldm.exe
