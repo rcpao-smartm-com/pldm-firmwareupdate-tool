@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <zlib.h>
 
 #include "pldm_fw_update_parse.h"
 
@@ -72,20 +73,36 @@ static void printHexBytes(const uint8_t *data, size_t len)
  */
 static int parseFile(const char* filePath)
 {
+    int status = 0;
     FILE* fp = fopen(filePath, "rb");
     if (!fp)
     {
-        fprintf(stderr, "Error: cannot open pldm_update_header.bin\n");
+        fprintf(stderr, "Error: cannot open '%s'\n", filePath);
         return 1;
     }
 
     /* Step 1: read pkg_header_size from offset=17 (2 bytes) */
-    fseek(fp, 17, SEEK_SET);
+    if (fseek(fp, 17, SEEK_SET) != 0)
+    {
+        fprintf(stderr, "Error: seek failed in '%s'\n", filePath);
+        fclose(fp);
+        return 1;
+    }
     uint16_t pkgHeaderSize = 0;
-    fread(&pkgHeaderSize, sizeof(pkgHeaderSize), 1, fp);
+    if (fread(&pkgHeaderSize, sizeof(pkgHeaderSize), 1, fp) != 1)
+    {
+        fprintf(stderr, "Error: cannot read PackageHeaderSize from '%s'\n", filePath);
+        fclose(fp);
+        return 1;
+    }
 
     /* Return to file start */
-    fseek(fp, 0L, SEEK_SET);
+    if (fseek(fp, 0L, SEEK_SET) != 0)
+    {
+        fprintf(stderr, "Error: rewind failed in '%s'\n", filePath);
+        fclose(fp);
+        return 1;
+    }
 
     /* Read entire package header into a buffer */
     uint8_t* buffer = (uint8_t*)malloc(pkgHeaderSize);
@@ -95,7 +112,14 @@ static int parseFile(const char* filePath)
         fclose(fp);
         return 1;
     }
-    fread(buffer, pkgHeaderSize, 1, fp);
+    if (fread(buffer, 1, pkgHeaderSize, fp) != pkgHeaderSize)
+    {
+        fprintf(stderr, "Error: cannot read package header (%u bytes) from '%s'\n",
+                pkgHeaderSize, filePath);
+        free(buffer);
+        fclose(fp);
+        return 1;
+    }
     fclose(fp);
 
     /* 1) Interpret the buffer start as a PLDMFirmwarePackageHeader */
@@ -341,7 +365,9 @@ static int parseFile(const char* filePath)
                 free(buffer);
                 return 1;
             }
-            printf("  (record body %d bytes; skipping detailed parse)\n\n", dRecLen - 2);
+            /* Stay aligned for foreign packages; detailed field dump not implemented. */
+            printf("  (skipping %d-byte record body; layout continues by RecordLength)\n\n",
+                   dRecLen - 2);
             index = recStart + dRecLen;
         }
     }
@@ -438,6 +464,21 @@ static int parseFile(const char* filePath)
         printf("--------------------------------------------\n");
         printf("Package Header Checksum (CRC32): 0x%08x\n", sumVal);
 
+        /* Header CRC covers all header bytes except trailing checksum field(s). */
+        uint16_t headerCrcLen = (uint16_t)(pkgHeaderSize - trail);
+        unsigned long calcHdr = crc32(0L, Z_NULL, 0);
+        calcHdr = crc32(calcHdr, buffer, headerCrcLen);
+        if ((uint32_t)calcHdr == sumVal)
+        {
+            printf("Package Header Checksum: OK (matches computed 0x%08lx)\n", calcHdr);
+        }
+        else
+        {
+            printf("Package Header Checksum: FAIL (computed 0x%08lx, expected 0x%08x)\n",
+                   calcHdr, sumVal);
+            status = 1;
+        }
+
         if (pldmFwHasReferenceManifest(specVer))
         {
             uint32_t payloadCrc = pldmFwExtractUint32LE(
@@ -445,6 +486,49 @@ static int parseFile(const char* filePath)
                 buffer[index + 2], buffer[index + 3]);
             index += 4;
             printf("Package Payload Checksum (CRC32): 0x%08x\n", payloadCrc);
+
+            /* Payload CRC is over bytes immediately following the header. */
+            FILE *pf = fopen(filePath, "rb");
+            if (!pf)
+            {
+                fprintf(stderr, "Error: cannot reopen '%s' for payload CRC\n", filePath);
+                status = 1;
+            }
+            else if (fseek(pf, pkgHeaderSize, SEEK_SET) != 0)
+            {
+                fprintf(stderr, "Error: cannot seek to payload in '%s'\n", filePath);
+                fclose(pf);
+                status = 1;
+            }
+            else
+            {
+                unsigned long calcPay = crc32(0L, Z_NULL, 0);
+                unsigned char pbuf[4096];
+                size_t n;
+                size_t total = 0;
+                while ((n = fread(pbuf, 1, sizeof(pbuf), pf)) > 0)
+                {
+                    calcPay = crc32(calcPay, pbuf, (uInt)n);
+                    total += n;
+                }
+                fclose(pf);
+                if (total == 0)
+                {
+                    printf("Package Payload Checksum: FAIL (no payload bytes after header)\n");
+                    status = 1;
+                }
+                else if ((uint32_t)calcPay == payloadCrc)
+                {
+                    printf("Package Payload Checksum: OK (%zu bytes, matches 0x%08lx)\n",
+                           total, calcPay);
+                }
+                else
+                {
+                    printf("Package Payload Checksum: FAIL (%zu bytes, computed 0x%08lx, expected 0x%08x)\n",
+                           total, calcPay, payloadCrc);
+                    status = 1;
+                }
+            }
         }
     }
     else
@@ -452,16 +536,18 @@ static int parseFile(const char* filePath)
         printf("--------------------------------------------\n");
         printf("No checksum found (index=%d, need %d more bytes, headerSize=%d)\n",
                index, trail, pkgHeaderSize);
+        status = 1;
     }
 
     if (index != pkgHeaderSize)
     {
         printf("Note: parse ended at offset %d (PackageHeaderSize=%d)\n",
                index, pkgHeaderSize);
+        status = 1;
     }
 
     free(buffer);
-    return 0;
+    return status;
 }
 
 int main(int argc, char** argv)

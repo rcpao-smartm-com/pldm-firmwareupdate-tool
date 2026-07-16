@@ -65,13 +65,15 @@ Build, then encode a package for a DSP0267 header revision:
 
     make all
     cd main
-    ./pldm_encode.exe <image_file> <firmware_version> <spec_version>
+    ./pldm_encode <image_file> <firmware_version> <spec_version>
+    # On Windows the binary is pldm_encode.exe
     # spec_version: 1.0 | 1.1 | 1.2 | 1.3
 
 Example (also what `make encode` runs):
 
     make encode
-    # -> main/pldm_encode.exe img_0.bin 1.0.0 1.0
+    # -> main/pldm_encode img_0.bin 1.0.0 1.0
+    # -> writes main/pldm1.0-img_0.bin
 
 | `<spec_version>` | Package Header Identifier (UUID) | Format revision |
 |------------------|----------------------------------|-----------------|
@@ -84,11 +86,24 @@ Example (also what `make encode` runs):
 ![image](https://github.com/quanta-Irenelin/PLDM_FW_UPDATE/assets/85274528/bf9a6505-9c90-46b1-a966-17715edf0ff9)
 
 
-### Decoding:
-To decode the generated file:
+### Decoding
+Decode auto-detects DSP0267 **1.0–1.3** from the package UUID / format revision, walks the matching header layout, and verifies CRC32 checksums (header always; payload CRC for 1.3).
 
+After `make encode` (produces `main/pldm1.0-img_0.bin`):
 
     make decode
+    # -> main/decode/parse_pldm ../pldm1.0-img_0.bin
+
+Or decode any package manually:
+
+    cd main/decode
+    ./parse_pldm ../pldm1.0-img_0.bin
+    ./parse_pldm ../pldm1.1-img_0.bin
+    ./parse_pldm ../pldm1.2-img_0.bin
+    ./parse_pldm ../pldm1.3-img_0.bin
+    # On Windows: parse_pldm.exe
+
+Non-empty Downstream Device ID records (common in packages from other tools) are skipped by `RecordLength` so the rest of the header stays aligned; detailed pretty-print of those record bodies is not implemented yet.
 
 ![image](https://github.com/quanta-Irenelin/PLDM_FW_UPDATE/assets/85274528/01490ea7-1c65-4ba3-87b0-20c350b4496c)
 
