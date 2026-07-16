@@ -102,7 +102,10 @@ Or decode a package manually:
     ./parse_pldm ../pldm1.3-img_0.bin
     # On Windows: parse_pldm.exe
 
-Non-empty Downstream Device ID records (common in packages from other tools) are skipped by `RecordLength` so the rest of the header stays aligned; detailed pretty-print of those record bodies is not implemented yet.
+Limitations:
+
+- This tool’s encoder writes empty/zero-length optional fields: Downstream Device ID Record Count `0` (1.1+), Component Opaque Data length `0` (1.2+), and Reference Manifest length `0` (1.3). So `make decode` exercises the version layouts and CRCs, but not non-empty opaque/manifest/downstream payloads.
+- Non-empty Downstream Device ID records (e.g. from other tools) are skipped by `RecordLength` so the rest of the header stays aligned; detailed pretty-print of those record bodies is not implemented yet.
 
 ![image](https://github.com/quanta-Irenelin/PLDM_FW_UPDATE/assets/85274528/01490ea7-1c65-4ba3-87b0-20c350b4496c)
 

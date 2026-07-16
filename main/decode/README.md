@@ -63,6 +63,8 @@ Supported layout extras by version:
 | 1.2 | ComponentOpaqueDataLength / Data |
 | 1.3 | ReferenceManifestLength / Data, Package Payload Checksum |
 
+Limitation: packages from this repo’s encoder use empty Downstream / Opaque / Reference Manifest fields (lengths/count zero). Decode supports non-empty Opaque and Manifest data when present, but Downstream record bodies are only skipped by `RecordLength` (no detailed pretty-print yet). `make decode` therefore does not exercise non-empty optional payloads.
+
 ## 6. Example
 
 ```bash
