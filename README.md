@@ -89,12 +89,11 @@ Example (also what `make encode` runs):
 ### Decoding
 Decode auto-detects DSP0267 **1.0–1.3** from the package UUID / format revision, walks the matching header layout, and verifies CRC32 checksums (header always; payload CRC for 1.3).
 
-After `make encode` (produces `main/pldm1.0-img_0.bin`):
+Encode+decode smoke test for DSP0267 **1.0–1.3** (builds tools, writes `main/pldm{1.0,1.1,1.2,1.3}-img_0.bin`, verifies CRC on each):
 
     make decode
-    # -> main/decode/parse_pldm ../pldm1.0-img_0.bin
 
-Or decode any package manually:
+Or decode a package manually:
 
     cd main/decode
     ./parse_pldm ../pldm1.0-img_0.bin

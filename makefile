@@ -9,13 +9,22 @@ endif
 
 ENCODE = pldm_encode$(EXEEXT)
 DECODE = parse_pldm$(EXEEXT)
+SPECS = 1.0 1.1 1.2 1.3
 
 all:
 	(cd $(SUBDIRS) && make);
 	(cd main && make);
 decode:
+	(cd $(SUBDIRS) && make);
+	(cd main && make);
 	(cd $(SUBDIRS_decode) && make);
-	(cd main/decode && ./$(DECODE) ../pldm1.0-img_0.bin);
+	@for v in $(SPECS); do \
+		echo "===== encode $$v ====="; \
+		(cd main && ./$(ENCODE) img_0.bin 1.0.0 $$v) || exit 1; \
+		echo "===== decode $$v ====="; \
+		(cd main/decode && ./$(DECODE) ../pldm$$v-img_0.bin) || exit 1; \
+	done
+	@echo "decode test OK for $(SPECS)"
 encode:
 	(cd main && ./$(ENCODE) img_0.bin 1.0.0 1.0 && make mv_file);
 clean:

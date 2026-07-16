@@ -43,7 +43,7 @@ This will produce:
 - `libparse.a`  
 - `parse_pldm` (or `parse_pldm.exe` on Windows)
 
-From the repo root, `make decode` builds the tool and parses the package produced by `make encode` (`main/pldm1.0-img_0.bin`).
+From the repo root, `make decode` builds encode/decode, packages `img_0.bin` for DSP0267 1.0–1.3, and runs `parse_pldm` on each (CRC verify).
 
 ## 5. Usage
 
