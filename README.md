@@ -58,7 +58,8 @@ Upon successful execution, the utility generates:
 ### Installation
 For the json-c library:
     
-    sudo apt install libjson-c-dev
+    sudo apt install libjson-c-dev # Ubuntu
+    sudo dnf install -y json-c-devel # Fedora
 
 ### Encoding 
 Build, then encode a package for a DSP0267 header revision:
